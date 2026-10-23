@@ -1,6 +1,3 @@
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * Code refactoring is restructuring existing code to improve its internal design 
  * without changing what it does. 
@@ -28,37 +25,25 @@ public class LibraryBefore {
     // ------------------------------------------------------------
 
     static class Book {
-        private final String isbn;
-        private final String title;
-        private Member borrower;   // null when the book is on the shelf
+        String isbn;
+        String title;
+        Member borrower;   // null when the book is on the shelf
 
         Book(String isbn, String title) {
             this.isbn = isbn;
             this.title = title;
         }
-
-        String getIsbn() {
-            return isbn;
-        }
-
-        Member getBorrower() {
-            return borrower;
-        }
-
-        void setBorrower(Member borrower) {
-            this.borrower = borrower;
-        }
     }
 
-    private static final class MemberDetails {
-        private final String id;
-        private final String name;
-        private final String type;
-        private final String email;
-        private final String phone;
-        private final String city;
+    static class Member {
+        String id;
+        String name;
+        String type;    // "BASIC", "GOLD" or "STUDENT"
+        String email;   // optional - can be null
+        String phone;
+        String city;
 
-        MemberDetails(String id, String name, String type, String email, String phone, String city) {
+        Member(String id, String name, String type, String email, String phone, String city) {
             this.id = id;
             this.name = name;
             this.type = type;
@@ -68,165 +53,151 @@ public class LibraryBefore {
         }
     }
 
-    private enum MemberType {
-        BASIC(3, 0.25),
-        GOLD(10, 0.10),
-        STUDENT(5, 0.15);
-
-        private final int borrowLimit;
-        private final double lateFeePerDay;
-
-        MemberType(int borrowLimit, double lateFeePerDay) {
-            this.borrowLimit = borrowLimit;
-            this.lateFeePerDay = lateFeePerDay;
-        }
-
-        static MemberType from(String type) {
-            for (MemberType memberType : values()) {
-                if (memberType.name().equals(type)) {
-                    return memberType;
-                }
-            }
-            return null;
-        }
-    }
-
-    static class Member {
-        private final String id;
-        private final String name;
-        private final String type;    // "BASIC", "GOLD" or "STUDENT"
-        private final String email;   // optional - can be null
-        private final String phone;
-        private final String city;
-
-        Member(MemberDetails details) {
-            this.id = details.id;
-            this.name = details.name;
-            this.type = details.type;
-            this.email = details.email;
-            this.phone = details.phone;
-            this.city = details.city;
-        }
-
-        String getId() {
-            return id;
-        }
-
-        String getType() {
-            return type;
-        }
-
-        String getEmail() {
-            return email;
-        }
-    }
-
-    private static final double MAX_LATE_FEE = 10.00;
-
-    private final List<Book> books = new ArrayList<>();
-    private final List<Member> members = new ArrayList<>();
+    // Plain arrays + a counter of how many slots are used
+    private Book[] books = new Book[20];
+    private int bookCount = 0;
+    private Member[] members = new Member[20];
+    private int memberCount = 0;
 
     public void addBook(String isbn, String title) {
-        books.add(new Book(isbn, title));
+        books[bookCount] = new Book(isbn, title);
+        bookCount++;
     }
 
     // PROBLEM 1: Too many parameters.
     // Six Strings in a row - it is very easy to pass them in the wrong order
     // (for example phone and city swapped) and the compiler cannot help you.
     public void addMember(String id, String name, String type, String email, String phone, String city) {
-        members.add(new Member(new MemberDetails(id, name, type, email, phone, city)));
+        members[memberCount] = new Member(id, name, type, email, phone, city);
+        memberCount++;
     }
 
-    private Book findBook(String isbn) {
-        for (Book book : books) {
-            if (book.getIsbn().equals(isbn)) {
-                return book;
-            }
-        }
-        return null;
-    }
 
-    private Member findMember(String memberId) {
-        for (Member member : members) {
-            if (member.getId().equals(memberId)) {
-                return member;
-            }
-        }
-        return null;
-    }
+//     private Book findBook(String isbn) {
+//     for (int i = 0; i < bookCount; i++) {
+//         if (books[i].isbn.equals(isbn)) {
+//             return books[i];
+//         }
+//     }
+//     return null;
+// }
 
-    // Shared lookup helpers keep search behavior in one place.
+// private Member findMember(String memberId) {
+//     for (int i = 0; i < memberCount; i++) {
+//         if (members[i].id.equals(memberId)) {
+//             return members[i];
+//         }
+//     }
+//     return null;
+// }
+
+// if (books[i] != null && books[i].isbn != null && books[i].isbn.equals(isbn))
+
+    // PROBLEM 3: The same search loops are copy-pasted in many methods.
     public String borrowBook(String isbn, String memberId) {
-        Book book = findBook(isbn);
-        if (book == null) {
+        Book book = null;
+        for (int i = 0; i < bookCount; i++) {
+            if (books[i].isbn.equals(isbn)) {
+                book = books[i];
+            }
+        }
+        Member member = null;
+        for (int i = 0; i < memberCount; i++) {
+            if (members[i].id.equals(memberId)) {
+                member = members[i];
+            }
+        }
+
+        if (book != null) {
+            if (member != null) {
+                if (book.borrower == null) {
+                    if (countBorrowed(member) < borrowLimit(member.type)) {
+                        book.borrower = member;
+                        return "OK";
+                    } else {
+                        return "LIMIT REACHED";
+                    }
+                } else {
+                    return "ALREADY BORROWED";
+                }
+            } else {
+                return "NO SUCH MEMBER";
+            }
+        } else {
             return "NO SUCH BOOK";
         }
-        Member member = findMember(memberId);
-        if (member == null) {
-            return "NO SUCH MEMBER";
-        }
-        if (book.getBorrower() != null) {
-            return "ALREADY BORROWED";
-        }
-        if (countBorrowed(member) >= borrowLimit(member.getType())) {
-            return "LIMIT REACHED";
-        }
-        book.setBorrower(member);
-        return "OK";
     }
 
     // Counts how many books this member has borrowed.
     public int countBorrowed(Member member) {
         int count = 0;
-        for (Book book : books) {
-            if (book.getBorrower() == member) {
+        for (int i = 0; i < bookCount; i++) {
+            if (books[i].borrower == member) {
                 count++;
             }
         }
         return count;
     }
 
-    // MemberType centralizes the type-specific borrowing rules.
+    // PROBLEM 4: Long if-else chain on a String "type code", full of magic numbers.
+    //            The same chain is repeated in lateFee(). A new member type = edit both places.
     public int borrowLimit(String type) {
-        MemberType memberType = MemberType.from(type);
-        return memberType == null ? 0 : memberType.borrowLimit;
+        if (type.equals("BASIC")) {
+            return 3;
+        } else if (type.equals("GOLD")) {
+            return 10;
+        } else if (type.equals("STUDENT")) {
+            return 5;
+        } else {
+            return 0;
+        }
     }
 
     public double lateFee(String memberId, int daysLate) {
-        Member member = findMember(memberId);
-        if (member == null) {
-            throw new IllegalArgumentException("Unknown member: " + memberId);
+        Member member = null;
+        for (int i = 0; i < memberCount; i++) {        // PROBLEM 3: copy-pasted search loop
+            if (members[i].id.equals(memberId)) {
+                member = members[i];
+            }
         }
 
-        double fee = daysLate * lateFeePerDay(member.getType());
-        fee = Math.min(fee, MAX_LATE_FEE);
+        double fee = 0;
+        if (member.type.equals("BASIC")) {             // PROBLEM 4: the same if-else chain again
+            fee = daysLate * 0.25;
+        } else if (member.type.equals("GOLD")) {
+            fee = daysLate * 0.10;
+        } else if (member.type.equals("STUDENT")) {
+            fee = daysLate * 0.15;
+        }
+        if (fee > 10) {
+            fee = 10;
+        }
         return fee;
     }
 
-    // Email is optional, so missing email is reported explicitly.
+    // PROBLEM 5: A NullPointerException waiting to happen.
+    //            Email is optional, but this code assumes every member has one.
     public String emailDomain(String memberId) {
-        Member member = findMember(memberId);
-        if (member == null) {
-            throw new IllegalArgumentException("Unknown member: " + memberId);
+        Member member = null;
+        for (int i = 0; i < memberCount; i++) {        // PROBLEM 3: copy-pasted search loop
+            if (members[i].id.equals(memberId)) {
+                member = members[i];
+            }
         }
-        if (member.getEmail() == null) {
-            throw new IllegalStateException("Member has no email: " + memberId);
-        }
-        return member.getEmail().substring(member.getEmail().indexOf("@") + 1);
+        return member.email.substring(member.email.indexOf("@") + 1);
     }
 
-    // Compare member type by value rather than object identity.
+    // PROBLEM 6: Comparing Strings with == instead of equals().
+    //            == checks "same object in memory", not "same text".
+    //            The test passes only by luck, because Java reuses identical string literals.
     public boolean isGoldMember(String memberId) {
-        Member member = findMember(memberId);
-        if (member == null) {
-            throw new IllegalArgumentException("Unknown member: " + memberId);
+        Member member = null;
+        for (int i = 0; i < memberCount; i++) {        // PROBLEM 3: copy-pasted search loop
+            if (members[i].id.equals(memberId)) {
+                member = members[i];
+            }
         }
-        return "GOLD".equals(member.getType());
-    }
-
-    private double lateFeePerDay(String type) {
-        MemberType memberType = MemberType.from(type);
-        return memberType == null ? 0 : memberType.lateFeePerDay;
+        return member.type == "GOLD";
     }
 
     // ================================================================
@@ -259,10 +230,10 @@ public class LibraryBefore {
         check("Gold member is gold",       true,  lib.isGoldMember("M2"));
         check("Basic member is not gold",  false, lib.isGoldMember("M1"));
 
-        // Uncomment this line to verify the explicit missing-email failure.
-        // System.out.println(lib.emailDomain("M3"));
+        // uncomment these lines to show the hidden problems.
+        // System.out.println(lib.emailDomain("M3"));        // PROBLEM 5 -> NullPointerException (Li has no email)
         lib.addMember("M4", "Kim", new String("GOLD"), "kim@mail.com", "514-555-0104", "Montreal");
-        System.out.println(lib.isGoldMember("M4"));
+        System.out.println(lib.isGoldMember("M4"));       // PROBLEM 6 -> prints false, but Kim IS gold
     }
 
     // ---- tiny test helpers (one for each kind of value) ----
